@@ -1,0 +1,1 @@
+# SQLite WASM minimal demo
