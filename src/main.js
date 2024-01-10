@@ -1,5 +1,10 @@
 import * as sqlite from './core.js'
-import { peek_ptr, cstr_to_js as _s, alloc_str_template as s } from './core.js'
+import {
+	abort,
+	peek_ptr,
+	cstr_to_js as _s,
+	alloc_str_template as s,
+} from './core.js'
 
 const app = document.querySelector('#app')
 
@@ -48,7 +53,7 @@ sqlite.load().then((asm) => {
 		log(`${JSON.stringify(Object.fromEntries(entries))}\n`)
 	}
 
-	const pFunc = sqlite.install_function(resultCallback, 'i(pipp)')
+	const pFunc = sqlite.install_function(resultCallback, 'i32', 'i32', 'i32', 'i32', 'i32')
 	const querySqlPtr = s`SELECT * FROM foo`
 	try {
 		const exec_rc = asm.sqlite3_exec(pDb, querySqlPtr, pFunc, 0, 0)

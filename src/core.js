@@ -4,33 +4,34 @@ let instance = null
 const ENCODER = new TextEncoder('utf8')
 const DECODER = new TextDecoder('utf8')
 
-const rxJSig = /^(\w)\((\w*)\)$/
 const typeCodes = { f64: 0x7c, f32: 0x7d, i64: 0x7e, i32: 0x7f }
-const sigTypes = { i: 'i32', p: 'i32', s: 'i32', j: 'i64', f: 'f32', d: 'f64' }
-
-const letterCode = (x) => typeCodes[sigTypes[x]]
+/** @param {keyof typeCodes} x */
+const typeCode = (x) => typeCodes[x]
+/** @param {number} n */
 const encodeBytes = (n) => (n < 128 ? [n] : [n % 128, n >> 7])
 
 /**
+ * create a funcref for the function table
+ * 
+ * stand-in for the upcoming `WebAssembly.Function` constructor
+ * 
  * @param {Function} func
- * @param {string} sig function signature
+ * @param {keyof typeCodes | null} resultType
+ * @param {...keyof typeCodes} argTypes
  */
-const func_to_wasm = (func, sig) => {
-	const m = rxJSig.exec(sig)
-	const sp = m ? m[2] : sig.slice(1)
-
+const to_funcref = (func, resultType, ...argTypes) => {
 	// prettier-ignore
 	const typeSection = [
 		// 1 func
 		0x01, 0x60,
 		// arg types
-		...encodeBytes(sp.length), ...[...sp].map(letterCode),
+		...encodeBytes(argTypes.length), ...argTypes.map(typeCode),
 		// result type
-		...(sig[0] === 'v' ? [0x00] : [0x01, letterCode(sig[0])]),
+		...(resultType === null ? [0x00] : [0x01, typeCode(resultType)]),
 	]
 
 	// prettier-ignore
-	const arr = new Uint8Array([
+	const bytecode = new Uint8Array([
 		// magic number (ASM)
 		0x00, 0x61, 0x73, 0x6d,
 		// version
@@ -43,7 +44,7 @@ const func_to_wasm = (func, sig) => {
 		0x07, 0x05, 0x01, 0x01, 0x66, 0x00, 0x00,
 	])
 
-	const mod = new WebAssembly.Module(arr)
+	const mod = new WebAssembly.Module(bytecode)
 	return new WebAssembly.Instance(mod, { e: { f: func } }).exports.f
 }
 
@@ -165,13 +166,14 @@ export const function_table = () => getASM().__indirect_function_table
 
 /**
  * @param {Function} func
- * @param {string} sig
+ * @param {keyof typeCodes | null} resultType
+ * @param {...keyof typeCodes} argTypes
  */
-export const install_function = (func, sig) => {
+export const install_function = (func, resultType, ...argTypes) => {
 	const ft = function_table()
 	const ptr = ft.length
 	ft.grow(1)
-	ft.set(ptr, func_to_wasm(func, sig))
+	ft.set(ptr, to_funcref(func, resultType, ...argTypes))
 	return ptr
 }
 
@@ -179,11 +181,15 @@ export const install_function = (func, sig) => {
  * copy a string into the WASM heap
  * 
  * @param {string} str
+ * @param {number} [ptr]
+ * @param {number} [max]
  */
-export const alloc_str = (str) => {
+export const alloc_str = (str, ptr, max) => {
 	const raw = ENCODER.encode(str)
-	const len = raw.length
-	const ptr = alloc(len + 1)
+	const len = max > 0 ? Math.min(max, raw.length) : raw.length
+	if (!ptr) {
+		ptr = alloc(len + 1)
+	}
 	heap.set(raw, ptr)
 	heap[ptr + len] = 0
 	return /** @type {[ptr: number, len: number]} */ ([ptr, len])
