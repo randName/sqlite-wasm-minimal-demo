@@ -1,20 +1,22 @@
 /** @type {WebAssembly.Instance | null} */
 let instance = null
 
-const ENCODER = new TextEncoder('utf8')
-const DECODER = new TextDecoder('utf8')
+const ENCODER = new TextEncoder()
+const DECODER = new TextDecoder()
 
 const typeCodes = { f64: 0x7c, f32: 0x7d, i64: 0x7e, i32: 0x7f }
+
 /** @param {keyof typeCodes} x */
 const typeCode = (x) => typeCodes[x]
+
 /** @param {number} n */
 const encodeBytes = (n) => (n < 128 ? [n] : [n % 128, n >> 7])
 
 /**
  * create a funcref for the function table
- * 
+ *
  * stand-in for the upcoming `WebAssembly.Function` constructor
- * 
+ *
  * @param {Function} func
  * @param {keyof typeCodes | null} resultType
  * @param {...keyof typeCodes} argTypes
@@ -45,12 +47,13 @@ const to_funcref = (func, resultType, ...argTypes) => {
 	])
 
 	const mod = new WebAssembly.Module(bytecode)
-	return new WebAssembly.Instance(mod, { e: { f: func } }).exports.f
+	const inst = new WebAssembly.Instance(mod, { e: { f: func } })
+	return inst.exports.f
 }
 
 /**
  * create a shim for the importObject (to prevent LinkError)
- * 
+ *
  * @param {unknown} target
  * @param {string} name
  */
@@ -71,19 +74,24 @@ const importShim = (target, name) => {
 
 export const memory = new WebAssembly.Memory({ initial: 256, maximum: 32768 })
 
-export const heap = new Uint8Array(memory.buffer)
-export const heap32 = new Int32Array(memory.buffer)
+/**
+ * create a view of the memory
+ *
+ * a reference to the view should not be held for long periods as the memory
+ * could be expanded and the buffer will be detached
+ */
+export const heap8u = () => new Uint8Array(memory.buffer)
 
+export const heap32 = () => new Int32Array(memory.buffer)
+
+/**
+ * @param {Response | PromiseLike<Response>} [source]
+ */
 export const load = async (source) => {
 	if (!source) {
 		source = fetch('/sqlite3.wasm')
 	}
 
-	/**
-	 * currently only 1 layer of shims are created.
-	 * there is a risk that emscripten might change the import surface,
-	 * but not of great concern for now.
-	 */
 	const src = await WebAssembly.instantiateStreaming(source, {
 		env: importShim({ memory }, 'env'),
 		wasi_snapshot_preview1: importShim({}, 'wasi'),
@@ -111,6 +119,7 @@ export const getASM = () => instance?.exports ?? abort('not initialized')
  * @param {number} ptr
  */
 const cstrend = (ptr) => {
+	const heap = heap8u()
 	while (heap[++ptr] !== 0) {}
 	return ptr
 }
@@ -129,7 +138,7 @@ export const cstrlen = (ptr) => {
  */
 export const cstr_to_js = (ptr) => {
 	const end = cstrend(ptr)
-	return ptr === end ? '' : DECODER.decode(heap.slice(ptr, end))
+	return ptr === end ? '' : DECODER.decode(heap8u().slice(ptr, end))
 }
 
 /**
@@ -159,7 +168,7 @@ export const realloc = (m, n) => {
 /**
  * @param {number} ptr
  */
-export const peek_ptr = (ptr) => heap32[ptr >> 2]
+export const peek_ptr = (ptr) => heap32()[ptr >> 2]
 
 /** @return {WebAssembly.Table} */
 export const function_table = () => getASM().__indirect_function_table
@@ -179,7 +188,7 @@ export const install_function = (func, resultType, ...argTypes) => {
 
 /**
  * copy a string into the WASM heap
- * 
+ *
  * @param {string} str
  * @param {number} [ptr]
  * @param {number} [max]
@@ -190,6 +199,7 @@ export const alloc_str = (str, ptr, max) => {
 	if (!ptr) {
 		ptr = alloc(len + 1)
 	}
+	const heap = heap8u()
 	heap.set(raw, ptr)
 	heap[ptr + len] = 0
 	return /** @type {[ptr: number, len: number]} */ ([ptr, len])
@@ -197,7 +207,7 @@ export const alloc_str = (str, ptr, max) => {
 
 /**
  * convenience template tag
- * 
+ *
  * @param {string[]} strs
  * @param {...unknown} vals
  */

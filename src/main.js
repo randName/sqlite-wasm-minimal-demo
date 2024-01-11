@@ -17,6 +17,9 @@ sqlite.load().then((asm) => {
 	log(`version: ${_s(asm.sqlite3_libversion())}\n`)
 	log(`source ID: ${_s(asm.sqlite3_sourceid())}\n`)
 
+	// extract the constants and struct info
+	// console.log(JSON.parse(_s(asm.sqlite3_wasm_enum_json())))
+
 	const memPtr = s`:memory:`
 	const stack = sqlite.pstack_ptr()
 	/** @type {number} */
