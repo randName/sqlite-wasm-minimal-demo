@@ -92,11 +92,20 @@ export const load = async (source) => {
 		source = fetch('/sqlite3.wasm')
 	}
 
+	// some are invoked by call_ctors but are satisfied with a no-op
+	const wasi = {
+		environ_get: () => 0,
+		environ_sizes_get: () => 0,
+	}
+
 	const src = await WebAssembly.instantiateStreaming(source, {
 		env: importShim({ memory }, 'env'),
-		wasi_snapshot_preview1: importShim({}, 'wasi'),
+		wasi_snapshot_preview1: importShim(wasi, 'wasi'),
 	})
 	instance = src.instance
+
+	// startup command from emscripten
+	instance.exports.__wasm_call_ctors()
 
 	return instance.exports
 }

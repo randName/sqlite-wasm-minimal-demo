@@ -16,6 +16,9 @@ Thankfully, the SQLite team encourages alternate implementations, and projects l
 
 ## Using the module
 
+> [!WARNING] 
+> The following steps are not officially supported and may break without warning
+
 There are some things to handle when using the `sqlite3.wasm` module in JS
 
 ### creating `Memory` and providing imports
@@ -59,6 +62,8 @@ In this demo
 A helper that uses a [tagged template](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates) (`alloc_str_template`) is also shown
 
 ### struct info and `SQLITE_*` constants
+
+**Warning**: this function is not part of the public API and may be changed without notice
 
 The WASM build exposes the [constants](https://sqlite.org/c3ref/constlist.html) and struct member information via `sqlite3_wasm_enum_json`. The exposed object requires some processing, but should be simple to implement (not shown in the demo). Beware that the `.structs` value is an array and not an object like the others, see the [C structs](#c-structs) section for more details
 
